@@ -539,7 +539,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "Weight decay for thresholds."}
     )
     masking_mode: str = field(
-        default='hard', metadata={"help": "Masking mode. 'soft', 'hard' and 'mixed'. 'mixed executes the first half with soft masking and the remaining half with hard mask."}
+        default=None, metadata={"help": "Masking mode. 'soft', 'hard' and 'mixed'. 'mixed executes the first half with soft masking and the remaining half with hard mask."}
     )
     temperature: float = field(
         default=1e-3, metadata={"help": "Temperature for the sigmoid of soft masking."}
