@@ -1105,12 +1105,13 @@ class Trainer:
         # TODO this is an adhoc solution
         if self.args.masking_mode == 'hard':
             model.get_model().set_hard_masking(True)
+            model.get_model().set_temperature(self.args.temperature)
         elif self.args.masking_mode == 'soft':
             model.get_model().set_hard_masking(False)
+            model.get_model().set_temperature(self.args.temperature)
         else:
-            raise NotImplementedError
+            pass
 
-        model.get_model().set_temperature(self.args.temperature)
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
 
@@ -1267,12 +1268,13 @@ class Trainer:
 
         if self.args.masking_mode == 'hard':
             self.model.get_model().set_hard_masking(True)
+            model.get_model().set_temperature(self.args.temperature)
         elif self.args.masking_mode == 'soft':
             self.model.get_model().set_hard_masking(False)
+            model.get_model().set_temperature(self.args.temperature)
         else:
-            raise NotImplementedError
+            pass
 
-        model.get_model().set_temperature(self.args.temperature)
 
         metrics = speed_metrics("train", start_time, self.state.max_steps)
         if self._total_flos is not None:
@@ -1875,16 +1877,17 @@ class Trainer:
 
         n_samples = len(eval_dataset if eval_dataset is not None else self.eval_dataset)
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, n_samples))
-        target_model = self.model.get_model()
         self.log(output.metrics)
 
         logger.info("")
-        for i, layer in enumerate(target_model.encoder.layer):
-            # just an adhoc code for debugging
-            if 'AbsoluteThresholdTokenPruner' in str(type(layer.attention.self.pruner)):
-                logger.info("Layer %d Treshold: %.5f" % (i,
-                    float(layer.attention.self.pruner.keep_threshold + layer.attention.self.pruner.keep_threshold_base))
-                )
+        if self.model.masking_mode is not None:
+            target_model = self.model.get_model()
+            for i, layer in enumerate(target_model.encoder.layer):
+                # just an adhoc code for debugging
+                if 'AbsoluteThresholdTokenPruner' in str(type(layer.attention.self.pruner)):
+                    logger.info("Layer %d Treshold: %.5f" % (i,
+                        float(layer.attention.self.pruner.keep_threshold + layer.attention.self.pruner.keep_threshold_base))
+                    )
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
