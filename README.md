@@ -7,7 +7,10 @@
 # Installation
 We follow the same installation procedure as the original [Huggingface transformer](https://github.com/huggingface/transformers) repo.
 ```
-pip install sklearn scipy datasets torch
+# sligtly change due to version deprication
+conda create -n ltp python=3.8
+pip install torch --index-url https://download.pytorch.org/whl/cu118
+pip install tokenizers==0.10.* datasets==2.8.0 sklearn scipy calflops
 pip install -e .  # in the top directory
 ```
 

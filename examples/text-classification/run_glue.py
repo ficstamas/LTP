@@ -24,8 +24,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
-from datasets import load_dataset
-from evaluate import load as load_metric
+from datasets import load_dataset, load_metric
 
 import transformers
 from transformers import (
