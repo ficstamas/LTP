@@ -139,6 +139,7 @@ _deps = [
     "unidic_lite>=1.0.7",
     "uvicorn",
     "sagemaker>=2.31.0",
+    "calflops"
 ]
 
 

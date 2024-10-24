@@ -111,7 +111,7 @@ from .trainer_utils import (
 from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
 from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-
+from calflops import calculate_flops as calculate_flops_unified
 
 _is_native_amp_available = False
 
@@ -260,6 +260,7 @@ class Trainer:
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
+        self.model_baseline = None
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
         self.hp_name = None
@@ -1607,7 +1608,7 @@ class Trainer:
 
         return loss.detach()
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model: PreTrainedModel, inputs, return_outputs=False):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
@@ -1617,6 +1618,21 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+
+        self.model_baseline: PreTrainedModel
+        if self.model_baseline is None:
+            import copy
+            cfg = copy.deepcopy(model.config)
+            if getattr(cfg, 'prune_mode', None) is not None:
+                cfg.prune_mode = 'noop'
+            self.model_baseline = model.__class__.from_pretrained(model.name_or_path, config=model.config)
+            self.model.eval()
+            bs_device = torch.device(type=model.device.type, index=model.device.index + 1)
+            try:
+                self.model_baseline.to(bs_device)
+            except RuntimeError as e:
+                raise RuntimeError(f"We are assuming that your model is on CUDA, and that {bs_device} exists, a.k.a the device of the model + 1.")
+
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -1631,36 +1647,34 @@ class Trainer:
         
         if "attention_sentence_lengths" in outputs and len(outputs["attention_sentence_lengths"]) > 0:
             assert "ffn_sentence_lengths" in outputs and len(outputs["ffn_sentence_lengths"]) > 0
-            dim = model.get_model().config.hidden_size
-            mac, baseline_mac = self.compute_macs(
-                outputs["attention_sentence_lengths"],
-                outputs["ffn_sentence_lengths"],
-                dim,
+            measure = self.compute_macs(
+                model,
+                self.model_baseline,
+                inputs
             )
-            
-            self.macs += mac
-            self.baseline_macs += baseline_mac
+
+            self.flops += measure["pruned"][0]
+            self.macs += measure["pruned"][1]
+            self.baseline_flops += measure["baseline"][0]
+            self.baseline_macs += measure["baseline"][1]
 
         return (loss, outputs) if return_outputs else loss
 
-    def compute_macs(self, attention_sentence_lengths, ffn_sentence_lengths, dim):
-        def _layer_mac(attention_sentence_length, ffn_sentence_length, dim):
-            attention_mac = 2 * dim * attention_sentence_length ** 2 # Q*V, attn*V
-            attention_mac += 4 * dim ** 2 * attention_sentence_length
-            ffn_mac = 8 * dim ** 2 * ffn_sentence_length
-            return attention_mac + ffn_mac
+    @staticmethod
+    def compute_cost_in_input(model, inp):
+        original_device = inp.device
+        inp = inp.to(model.device)
+        flops, macs, _ = calculate_flops_unified(
+            model, output_as_string=False, print_results=False, print_detailed=False, kwargs=inp
+        )
+        inp = inp.to(original_device)
+        return flops, macs
 
-        mac = 0
-        for i in range(len(attention_sentence_lengths)):
-            attention_sentence_length = attention_sentence_lengths[i]
-            ffn_sentence_length = ffn_sentence_lengths[i]
-            mac += _layer_mac(attention_sentence_length, ffn_sentence_length, dim)
+    def compute_macs(self, model, baseline_model, inp):
+        b_flops, b_macs = calculate_flops_unified(baseline_model, inp)
+        p_flops, p_macs = calculate_flops_unified(model, inp)
 
-        baseline_mac = _layer_mac(
-            attention_sentence_lengths[0], attention_sentence_lengths[0], dim
-        ) * len(attention_sentence_lengths)
-
-        return mac.cpu().tolist(), baseline_mac.cpu().tolist()
+        return {"pruned": (p_flops, p_macs), "baseline": (b_flops, b_macs)}
 
     def is_local_process_zero(self) -> bool:
         """
@@ -1996,7 +2010,9 @@ class Trainer:
         self.callback_handler.eval_dataloader = dataloader
 
         self.macs = []
+        self.flops = []
         self.baseline_macs = []
+        self.baseline_flops = []
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
@@ -2052,9 +2068,14 @@ class Trainer:
         # Log FLOPs if MACs are counted
         if len(self.macs) > 0:
             assert len(self.baseline_macs) > 0
-            metrics["baseline_gflops"] = 2 * sum(self.baseline_macs) / len(self.baseline_macs) * 1e-9
-            metrics["gflops"] = 2 * sum(self.macs) / len(self.macs) * 1e-9
-            metrics["relative_flops"] = sum(self.macs) / sum(self.baseline_macs)
+            metrics["baseline_flops_avg"] = sum(self.baseline_flops) / len(self.baseline_flops)
+            metrics["baseline_macs_avg"] = sum(self.baseline_macs) / len(self.baseline_macs)
+
+            metrics["flops_avg"] = sum(self.flops) / len(self.flops)
+            metrics["macs_avg"] = sum(self.macs) / len(self.macs)
+
+            metrics["relative_flops"] = sum(self.flops) / sum(self.baseline_flops)
+            metrics["relative_macs"] = sum(self.macs) / sum(self.baseline_macs)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 

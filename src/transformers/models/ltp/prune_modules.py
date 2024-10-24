@@ -147,9 +147,22 @@ class AbsoluteThresholdTokenPruner(AbstractTokenPruner):
         return new_attention_mask, pruner_outputs
 
 
-TOKEN_PRUNERS = {'topk': CascadeTokenPruner,
-                 'threshold': ThresholdTokenPruner,
-                 'rising_threshold': RisingThresholdTokenPruner,
-                 'absolute_threshold': AbsoluteThresholdTokenPruner,
-                 }
+class NoOpTokenPruner(AbstractTokenPruner):
+    """
+    No Operation pruner for baseline score
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
 
+    def update_attention_mask(self, attention_mask, attention_probs, sentence_lengths):
+        return attention_mask
+
+
+
+TOKEN_PRUNERS = {
+    'topk': CascadeTokenPruner,
+    'threshold': ThresholdTokenPruner,
+    'rising_threshold': RisingThresholdTokenPruner,
+    'absolute_threshold': AbsoluteThresholdTokenPruner,
+    'noop': NoOpTokenPruner
+}
