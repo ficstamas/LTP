@@ -710,7 +710,7 @@ class TrainingArguments:
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
             # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
             # the default value.
-            self._n_gpu = torch.cuda.device_count()
+            self._n_gpu = 1  # slightly lazy ad-hoc hacking
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs

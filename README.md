@@ -10,8 +10,14 @@ We follow the same installation procedure as the original [Huggingface transform
 # sligtly change due to version deprication
 conda create -n ltp python=3.8
 pip install torch --index-url https://download.pytorch.org/whl/cu118
-pip install tokenizers==0.10.* datasets==2.8.0 sklearn scipy calflops
+pip install tokenizers==0.10.* datasets sklearn scipy calflops
 pip install -e .  # in the top directory
+```
+
+you may have to downgrade `fsspec` if it complains about accessing local files:
+
+```
+pip install -U fsspec==2023.9.2
 ```
 
 # Prepare Checkpoints
