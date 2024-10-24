@@ -5,7 +5,7 @@ TASKS=("MNLI" "RTE" "MRPC" "STSB" "SST2" "QNLI" "QQP")
 
 for task in "${TASKS[@]}"
 do
-  python examples/text-classification run_glue.py \
+  python examples/text-classification/run_glue.py \
          --model_name_or_path kssteven/ibert-roberta-base \
          --output_dir "ckpt/$task/" \
          --task "$task" --do_train --do_eval \
