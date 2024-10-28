@@ -1880,7 +1880,7 @@ class Trainer:
         self.log(output.metrics)
 
         logger.info("")
-        if self.model.masking_mode is not None:
+        if getattr(self.args, "masking_mode", None) is not None:
             target_model = self.model.get_model()
             for i, layer in enumerate(target_model.encoder.layer):
                 # just an adhoc code for debugging
